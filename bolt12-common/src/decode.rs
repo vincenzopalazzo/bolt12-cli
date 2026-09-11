@@ -1,5 +1,7 @@
 use std::str::FromStr;
 
+use bech32::primitives::decode::CheckedHrpstring;
+use bech32::NoChecksum;
 use lightning::offers::invoice::Bolt12Invoice;
 use lightning::offers::offer::{Amount as LdkAmount, Offer as LdkOffer};
 use lightning::offers::payer_proof::PayerProof as LdkPayerProof;
@@ -58,16 +60,36 @@ pub(crate) fn decode_invoice(encoded: &str) -> Result<Invoice, Error> {
 }
 
 pub(crate) fn parse_invoice(encoded: &str) -> Result<Bolt12Invoice, Error> {
-    // LDK exposes `FromStr` for offers and payer proofs, but invoices are still
-    // TLV-only on the public API. Decode the `lni` bech32 ourselves, then use
-    // `TryFrom<Vec<u8>>` which verifies the invoice signature.
-    let bytes = crate::bech32::decode_bolt12(encoded, "lni")?;
+    // Offer and payer proof already have `FromStr`. Invoice is still TLV-only
+    // on the public API, so decode `lni` the same way LDK's `from_bech32_str`
+    // does: flatten `+` continuations, then `TryFrom<Vec<u8>>`.
+    let bytes = bech32_no_checksum(encoded)?;
     Bolt12Invoice::try_from(bytes).map_err(|err| {
         Error::new(
             ErrorKind::DecodeFailed,
             format!("invoice decode failed: {err:?}"),
         )
     })
+}
+
+fn bech32_no_checksum(encoded: &str) -> Result<Vec<u8>, Error> {
+    let compact: String = encoded
+        .chars()
+        .filter(|c| *c != '+' && !c.is_whitespace())
+        .collect();
+    let parsed = CheckedHrpstring::new::<NoChecksum>(&compact).map_err(|err| {
+        Error::new(
+            ErrorKind::DecodeFailed,
+            format!("bech32 decode failed: {err:?}"),
+        )
+    })?;
+    parsed.validate_segwit_padding().map_err(|err| {
+        Error::new(
+            ErrorKind::DecodeFailed,
+            format!("invalid bech32 padding: {err:?}"),
+        )
+    })?;
+    Ok(parsed.byte_iter().collect())
 }
 
 pub(crate) fn decode_payer_proof(encoded: &str) -> Result<PayerProof, Error> {
