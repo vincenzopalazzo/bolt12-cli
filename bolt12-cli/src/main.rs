@@ -1,6 +1,7 @@
 use std::io::{self, Write};
 use std::process::ExitCode;
 
+use clap::error::ErrorKind as ClapErrorKind;
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 
@@ -40,10 +41,15 @@ enum Command {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let args = match Args::try_parse() {
+        Ok(args) => args,
+        Err(err) => return handle_clap_error(err),
+    };
     match run(args) {
         Ok(RunOutcome { value, valid }) => {
-            print_json(&value);
+            if print_json(&value).is_err() {
+                return ExitCode::from(1);
+            }
             if valid {
                 ExitCode::SUCCESS
             } else {
@@ -51,12 +57,34 @@ fn main() -> ExitCode {
             }
         }
         Err(err) => {
-            print_json(&serde_json::to_value(&err).unwrap_or_else(|_| {
+            let value = serde_json::to_value(&err).unwrap_or_else(|_| {
                 serde_json::json!({
                     "error": "invalid_argument",
                     "message": "failed to serialize error",
                 })
-            }));
+            });
+            if print_json(&value).is_err() {
+                return ExitCode::from(1);
+            }
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn handle_clap_error(err: clap::Error) -> ExitCode {
+    match err.kind() {
+        ClapErrorKind::DisplayHelp | ClapErrorKind::DisplayVersion => {
+            let _ = err.print();
+            ExitCode::SUCCESS
+        }
+        _ => {
+            let value = serde_json::json!({
+                "error": "invalid_argument",
+                "message": err.to_string(),
+            });
+            if print_json(&value).is_err() {
+                return ExitCode::from(1);
+            }
             ExitCode::from(1)
         }
     }
@@ -129,8 +157,9 @@ fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, Error> {
     })
 }
 
-fn print_json(value: &Value) {
+fn print_json(value: &Value) -> io::Result<()> {
     let encoded = serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string());
     let mut stdout = io::stdout().lock();
-    let _ = writeln!(stdout, "{encoded}");
+    writeln!(stdout, "{encoded}")?;
+    stdout.flush()
 }

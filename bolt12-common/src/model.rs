@@ -108,11 +108,22 @@ impl Check {
 
 impl VerifyReport {
     pub fn new(kind: VerifyKind, checks: Vec<Check>) -> Self {
-        let valid = checks.iter().all(|check| check.passed);
+        let valid = !checks.is_empty() && checks.iter().all(|check| check.passed);
         Self {
             valid,
             kind,
             checks,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_report_is_not_valid() {
+        let report = VerifyReport::new(VerifyKind::PayerProof, Vec::new());
+        assert!(!report.valid);
     }
 }
