@@ -13,3 +13,7 @@ bech32.workspace = true
 lightning.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
