@@ -1,0 +1,136 @@
+use std::io::{self, Write};
+use std::process::ExitCode;
+
+use clap::{Parser, Subcommand};
+use serde_json::Value;
+
+use bolt12_common::{decode, verify_payer_proof, verify_payment, Error, ErrorKind};
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "bolt12",
+    about = "Swiss knife for BOLT12 offers, invoices, and payer proofs"
+)]
+struct Args {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Decode a BOLT12 offer (`lno1`), invoice (`lni1`), or payer proof (`lnp1`).
+    Decode {
+        /// Bech32-encoded BOLT12 string.
+        encoded: String,
+    },
+    /// Verify a payer proof or an offer+invoice+preimage triple.
+    Verify {
+        /// Official BOLT12 payer proof (`lnp1...`).
+        proof: Option<String>,
+        /// BOLT12 offer (`lno1...`).
+        #[arg(long)]
+        offer: Option<String>,
+        /// BOLT12 invoice (`lni1...`).
+        #[arg(long)]
+        invoice: Option<String>,
+        /// Payment preimage (64 hex characters).
+        #[arg(long)]
+        preimage: Option<String>,
+    },
+}
+
+fn main() -> ExitCode {
+    let args = Args::parse();
+    match run(args) {
+        Ok(RunOutcome { value, valid }) => {
+            print_json(&value);
+            if valid {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
+        }
+        Err(err) => {
+            print_json(&serde_json::to_value(&err).unwrap_or_else(|_| {
+                serde_json::json!({
+                    "error": "invalid_argument",
+                    "message": "failed to serialize error",
+                })
+            }));
+            ExitCode::from(1)
+        }
+    }
+}
+
+struct RunOutcome {
+    value: Value,
+    valid: bool,
+}
+
+fn run(args: Args) -> Result<RunOutcome, Error> {
+    match args.command {
+        Command::Decode { encoded } => {
+            let decoded = decode(&encoded)?;
+            Ok(RunOutcome {
+                value: to_value(&decoded)?,
+                valid: true,
+            })
+        }
+        Command::Verify {
+            proof,
+            offer,
+            invoice,
+            preimage,
+        } => {
+            let report = match (proof, offer, invoice, preimage) {
+                (Some(proof), None, None, None) => {
+                    let hrp = proof
+                        .trim()
+                        .split_once('1')
+                        .map(|(hrp, _)| hrp.to_ascii_lowercase());
+                    if hrp.as_deref() != Some("lnp") {
+                        return Err(Error::new(
+                            ErrorKind::InvalidArgument,
+                            "positional verify expects a payer proof (`lnp1...`); use `--offer --invoice --preimage` for a payment triple",
+                        ));
+                    }
+                    verify_payer_proof(&proof)?
+                }
+                (None, Some(offer), Some(invoice), Some(preimage)) => {
+                    verify_payment(&offer, &invoice, &preimage)?
+                }
+                (Some(_), _, _, _) => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidArgument,
+                        "verify a payer proof with `bolt12 verify <lnp1...>` or a payment with `--offer --invoice --preimage`, not both",
+                    ));
+                }
+                _ => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidArgument,
+                        "verify requires `<lnp1...>` or `--offer --invoice --preimage`",
+                    ));
+                }
+            };
+            Ok(RunOutcome {
+                valid: report.valid,
+                value: to_value(&report)?,
+            })
+        }
+    }
+}
+
+fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, Error> {
+    serde_json::to_value(value).map_err(|err| {
+        Error::new(
+            ErrorKind::InvalidArgument,
+            format!("json serialize failed: {err}"),
+        )
+    })
+}
+
+fn print_json(value: &Value) {
+    let encoded = serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string());
+    let mut stdout = io::stdout().lock();
+    let _ = writeln!(stdout, "{encoded}");
+}

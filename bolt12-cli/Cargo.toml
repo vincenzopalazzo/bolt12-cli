@@ -1,0 +1,19 @@
+[package]
+name = "bolt12-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Swiss-knife CLI for BOLT12 offers, invoices, and payer proofs"
+
+[[bin]]
+name = "bolt12"
+path = "src/main.rs"
+
+[dependencies]
+bolt12-common = { path = "../bolt12-common" }
+clap = { version = "4", features = ["derive"] }
+serde.workspace = true
+serde_json.workspace = true
