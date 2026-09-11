@@ -1,6 +1,5 @@
 //! Decode and verify BOLT 12 offers, invoices, and payer proofs.
 
-mod bech32;
 mod decode;
 mod error;
 mod hex;
