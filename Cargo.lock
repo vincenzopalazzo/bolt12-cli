@@ -151,6 +151,7 @@ dependencies = [
  "bech32",
  "lightning",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 

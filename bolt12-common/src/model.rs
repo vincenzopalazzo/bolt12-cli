@@ -3,6 +3,7 @@ use serde::Serialize;
 /// Curated decode of a BOLT 12 string.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
 pub enum Decoded {
     Offer(Offer),
     Invoice(Invoice),
@@ -12,17 +13,25 @@ pub enum Decoded {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Offer {
     pub offer_id: String,
+    pub chains: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub issuer: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub issuer_id: Option<String>,
+    pub metadata: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub features: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub absolute_expiry: Option<u64>,
-    pub chains: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<BlindedPath>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issuer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantity_max: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issuer_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -30,14 +39,47 @@ pub struct Invoice {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offer_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub offer_chains: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offer_amount: Option<Amount>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub offer_features: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_expiry: Option<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub offer_paths: Vec<BlindedPath>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
-    pub amount_msat: u64,
-    pub payment_hash: String,
-    pub node_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantity_max: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issuer_id: Option<String>,
+    pub chain: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payer_metadata: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invoice_request_features: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantity: Option<u64>,
+    pub payer_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payer_note: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub payment_paths: Vec<BlindedPath>,
     pub created_at: u64,
     pub relative_expiry: u64,
+    pub payment_hash: String,
+    pub amount_msat: u64,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fallbacks: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invoice_features: Option<String>,
+    pub node_id: String,
+    pub signature: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -47,6 +89,8 @@ pub struct PayerProof {
     pub payment_hash: String,
     pub payment_preimage: String,
     pub merkle_root: String,
+    pub invoice_signature: String,
+    pub proof_signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amount_msat: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,6 +101,44 @@ pub struct PayerProof {
     pub created_at: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof_note: Option<String>,
+}
+
+/// Blinded message or payment path without onion ciphertext.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BlindedPath {
+    pub introduction_node: IntroductionNode,
+    pub blinding_point: String,
+    pub hops: Vec<BlindedHop>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payinfo: Option<BlindedPayInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum IntroductionNode {
+    Node {
+        node_id: String,
+    },
+    ShortChannelId {
+        short_channel_id: String,
+        direction: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BlindedHop {
+    pub blinded_node_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BlindedPayInfo {
+    pub fee_base_msat: u32,
+    pub fee_proportional_millionths: u32,
+    pub cltv_expiry_delta: u16,
+    pub htlc_minimum_msat: u64,
+    pub htlc_maximum_msat: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub features: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
