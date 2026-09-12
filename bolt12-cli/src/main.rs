@@ -26,9 +26,9 @@ enum Command {
     },
     /// Verify a payer proof or an offer+invoice+preimage triple.
     Verify {
-        /// Official BOLT12 payer proof (`lnp1...`).
+        /// Official BOLT12 payer proof (`lnp1...`). Requires `--offer`.
         proof: Option<String>,
-        /// BOLT12 offer (`lno1...`).
+        /// BOLT12 offer (`lno1...`). Required for both verify paths.
         #[arg(long)]
         offer: Option<String>,
         /// BOLT12 invoice (`lni1...`).
@@ -111,7 +111,7 @@ fn run(args: Args) -> Result<RunOutcome, Error> {
             preimage,
         } => {
             let report = match (proof, offer, invoice, preimage) {
-                (Some(proof), None, None, None) => {
+                (Some(proof), Some(offer), None, None) => {
                     let hrp = proof
                         .trim()
                         .split_once('1')
@@ -122,21 +122,27 @@ fn run(args: Args) -> Result<RunOutcome, Error> {
                             "positional verify expects a payer proof (`lnp1...`); use `--offer --invoice --preimage` for a payment triple",
                         ));
                     }
-                    verify_payer_proof(&proof)?
+                    verify_payer_proof(&proof, &offer)?
                 }
                 (None, Some(offer), Some(invoice), Some(preimage)) => {
                     verify_payment(&offer, &invoice, &preimage)?
                 }
+                (Some(_), None, None, None) => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidArgument,
+                        "verify a payer proof requires `--offer <lno1...>`",
+                    ));
+                }
                 (Some(_), _, _, _) => {
                     return Err(Error::new(
                         ErrorKind::InvalidArgument,
-                        "verify a payer proof with `bolt12 verify <lnp1...>` or a payment with `--offer --invoice --preimage`, not both",
+                        "verify a payer proof with `bolt12 verify <lnp1...> --offer <lno1...>` or a payment with `--offer --invoice --preimage`, not both",
                     ));
                 }
                 _ => {
                     return Err(Error::new(
                         ErrorKind::InvalidArgument,
-                        "verify requires `<lnp1...>` or `--offer --invoice --preimage`",
+                        "verify requires `<lnp1...> --offer <lno1...>` or `--offer --invoice --preimage`",
                     ));
                 }
             };

@@ -11,6 +11,7 @@ description = "Decode and verify BOLT12 offers, invoices, and payer proofs"
 [dependencies]
 bech32.workspace = true
 lightning.workspace = true
+lightning-payer-proof.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 
