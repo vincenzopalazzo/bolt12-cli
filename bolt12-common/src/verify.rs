@@ -1,7 +1,8 @@
+use lightning::bitcoin::secp256k1::PublicKey;
 use lightning::offers::invoice::Bolt12Invoice;
 use lightning::offers::offer::Offer;
+use lightning::offers::payer_proof::PayerProof;
 use lightning::types::payment::{PaymentHash, PaymentPreimage};
-use lightning_payer_proof::{verify, VerifyError};
 use std::str::FromStr;
 
 use crate::decode::parse_invoice;
@@ -11,10 +12,10 @@ use crate::model::{Check, VerifyKind, VerifyReport};
 
 /// Verify an official BOLT 12 payer proof (`lnp1...`) against an offer.
 ///
-/// [`lightning_payer_proof::verify`] checks bech32, merkle reconstruction,
+/// LDK `PayerProof::from_str` checks bech32, merkle reconstruction,
 /// invoice-node signature, payer signature, and
-/// `SHA256(preimage) == payment_hash`. Failed cryptographic checks arrive as
-/// [`VerifyError::MalformedProof`] and are not distinguished from each other.
+/// `SHA256(preimage) == payment_hash`. Failed cryptographic checks are not
+/// distinguished from a malformed TLV stream.
 ///
 /// `pays_offers_recipient` then checks that the invoice issuer can sign for
 /// `offer`'s recipient. That is a recipient match, not "this paid this exact
@@ -22,7 +23,7 @@ use crate::model::{Check, VerifyKind, VerifyReport};
 pub fn verify_payer_proof(encoded: &str, offer: &str) -> Result<VerifyReport, Error> {
     let mut checks = Vec::new();
 
-    let proof = match verify(encoded.trim()) {
+    let proof = match PayerProof::from_str(encoded.trim()) {
         Ok(proof) => {
             checks.push(Check::pass("decode"));
             checks.push(Check::pass("merkle_root"));
@@ -31,12 +32,11 @@ pub fn verify_payer_proof(encoded: &str, offer: &str) -> Result<VerifyReport, Er
             checks.push(Check::pass("preimage"));
             proof
         }
-        Err(VerifyError::InvalidBech32) => {
-            checks.push(Check::fail("decode", "not a bech32-encoded payer proof"));
-            return Ok(VerifyReport::new(VerifyKind::PayerProof, checks));
-        }
         Err(err) => {
-            checks.push(Check::fail("decode", err.to_string()));
+            checks.push(Check::fail(
+                "decode",
+                format!("payer proof decode failed: {err:?}"),
+            ));
             return Ok(VerifyReport::new(VerifyKind::PayerProof, checks));
         }
     };
@@ -55,7 +55,7 @@ pub fn verify_payer_proof(encoded: &str, offer: &str) -> Result<VerifyReport, Er
         }
     };
 
-    if proof.pays_offers_recipient(&offer) {
+    if pays_offers_recipient(&offer, proof.issuer_signing_pubkey()) {
         checks.push(Check::pass("pays_offers_recipient"));
     } else {
         checks.push(Check::fail(
@@ -146,18 +146,22 @@ fn parse_preimage(hex: &str) -> Result<PaymentPreimage, Error> {
     Ok(PaymentPreimage(hex::decode_32(hex.trim())?))
 }
 
-/// Same rule LDK uses when checking `invoice_node_id` against an offer:
-/// explicit `issuer_id`, otherwise the last blinded hop of any offer path.
+/// Same rule LDK uses when checking an invoice or payer-proof issuer key
+/// against an offer: explicit `issuer_id`, otherwise the last blinded hop of
+/// any offer path.
 fn signing_pubkeys_match(offer: &Offer, invoice: &Bolt12Invoice) -> bool {
-    let invoice_key = invoice.signing_pubkey();
+    pays_offers_recipient(offer, invoice.signing_pubkey())
+}
+
+fn pays_offers_recipient(offer: &Offer, issuer_key: PublicKey) -> bool {
     if let Some(issuer) = offer.issuer_signing_pubkey() {
-        return issuer == invoice_key;
+        return issuer == issuer_key;
     }
     offer
         .paths()
         .iter()
         .filter_map(|path| path.blinded_hops().last())
-        .any(|hop| hop.blinded_node_id == invoice_key)
+        .any(|hop| hop.blinded_node_id == issuer_key)
 }
 
 #[cfg(test)]
