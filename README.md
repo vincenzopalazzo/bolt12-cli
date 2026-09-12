@@ -27,6 +27,9 @@ bolt12 decode lnp1...
 `decode lnp1` parses through LDK, which also verifies the proof. Invalid proofs
 cannot be decoded.
 
+Invoice JSON includes `unknown_invoice_tlvs` when any TLV type in 160–239 is
+not a BOLT 12 invoice field. The key is omitted when the list is empty.
+
 ## Verify
 
 Official payer proof:
