@@ -13,7 +13,7 @@ use crate::error::{Error, ErrorKind};
 use crate::hex;
 use crate::model::{
     Amount, BlindedHop, BlindedPath, BlindedPayInfo, Decoded, IntroductionNode, Invoice, Offer,
-    PayerProof,
+    PayerProof, UnknownTlv,
 };
 
 /// Decode a BOLT 12 bech32 string by HRP (`lno` / `lni` / `lnp`).
@@ -49,8 +49,15 @@ pub(crate) fn decode_offer(encoded: &str) -> Result<Offer, Error> {
 }
 
 pub(crate) fn decode_invoice(encoded: &str) -> Result<Invoice, Error> {
-    let invoice = parse_invoice(encoded)?;
-    Ok(curated_invoice(&invoice))
+    let bytes = bech32_no_checksum(encoded)?;
+    let invoice = Bolt12Invoice::try_from(bytes.clone()).map_err(|err| {
+        Error::new(
+            ErrorKind::DecodeFailed,
+            format!("invoice decode failed: {err:?}"),
+        )
+    })?;
+    let unknown = unknown_invoice_tlvs(&bytes)?;
+    Ok(curated_invoice(&invoice, unknown))
 }
 
 pub(crate) fn parse_invoice(encoded: &str) -> Result<Bolt12Invoice, Error> {
@@ -123,7 +130,7 @@ pub(crate) fn curated_offer(offer: &LdkOffer) -> Offer {
     }
 }
 
-pub(crate) fn curated_invoice(invoice: &Bolt12Invoice) -> Invoice {
+pub(crate) fn curated_invoice(invoice: &Bolt12Invoice, unknown: Vec<UnknownTlv>) -> Invoice {
     Invoice {
         offer_id: invoice.offer_id().map(|id| hex::encode(&id.0)),
         offer_chains: invoice.offer_chains().map(|chains| {
@@ -180,7 +187,65 @@ pub(crate) fn curated_invoice(invoice: &Bolt12Invoice) -> Invoice {
         invoice_features: features_hex(invoice.invoice_features().le_flags()),
         node_id: invoice.signing_pubkey().to_string(),
         signature: hex::encode(invoice.signature().as_ref()),
+        unknown_invoice_tlvs: unknown,
     }
+}
+
+/// Known BOLT 12 invoice TLV types (160–176). Anything else in 160..=239 is
+/// unknown; odd unknowns are ignored, even ones reject the invoice.
+const KNOWN_INVOICE_TLV_TYPES: &[u64] = &[160, 162, 164, 166, 168, 170, 172, 174, 176];
+
+fn unknown_invoice_tlvs(bytes: &[u8]) -> Result<Vec<UnknownTlv>, Error> {
+    let mut unknown = Vec::new();
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let type_id = read_bigsize(bytes, &mut pos)?;
+        let length = read_bigsize(bytes, &mut pos)?;
+        let len = usize::try_from(length)
+            .map_err(|_| Error::new(ErrorKind::DecodeFailed, "TLV length does not fit usize"))?;
+        if pos + len > bytes.len() {
+            return Err(Error::new(
+                ErrorKind::DecodeFailed,
+                "TLV value overruns invoice bytes",
+            ));
+        }
+        let value = &bytes[pos..pos + len];
+        pos += len;
+        if (160..=239).contains(&type_id) && !KNOWN_INVOICE_TLV_TYPES.contains(&type_id) {
+            unknown.push(UnknownTlv {
+                type_id,
+                length,
+                value: hex::encode(value),
+            });
+        }
+    }
+    Ok(unknown)
+}
+
+fn read_bigsize(bytes: &[u8], pos: &mut usize) -> Result<u64, Error> {
+    let first = *bytes
+        .get(*pos)
+        .ok_or_else(|| Error::new(ErrorKind::DecodeFailed, "truncated BigSize"))?;
+    *pos += 1;
+    match first {
+        0..=252 => Ok(u64::from(first)),
+        253 => read_be_int(bytes, pos, 2),
+        254 => read_be_int(bytes, pos, 4),
+        255 => read_be_int(bytes, pos, 8),
+    }
+}
+
+fn read_be_int(bytes: &[u8], pos: &mut usize, width: usize) -> Result<u64, Error> {
+    let end = pos
+        .checked_add(width)
+        .ok_or_else(|| Error::new(ErrorKind::DecodeFailed, "truncated BigSize"))?;
+    let slice = bytes
+        .get(*pos..end)
+        .ok_or_else(|| Error::new(ErrorKind::DecodeFailed, "truncated BigSize"))?;
+    *pos = end;
+    let mut padded = [0u8; 8];
+    padded[8 - width..].copy_from_slice(slice);
+    Ok(u64::from_be_bytes(padded))
 }
 
 pub(crate) fn curated_payer_proof(proof: &LdkPayerProof) -> PayerProof {

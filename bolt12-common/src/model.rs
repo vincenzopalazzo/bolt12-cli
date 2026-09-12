@@ -80,6 +80,17 @@ pub struct Invoice {
     pub invoice_features: Option<String>,
     pub node_id: String,
     pub signature: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unknown_invoice_tlvs: Vec<UnknownTlv>,
+}
+
+/// Unknown TLV in the invoice type range (160–239).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnknownTlv {
+    #[serde(rename = "type")]
+    pub type_id: u64,
+    pub length: u64,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
