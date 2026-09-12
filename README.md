@@ -6,13 +6,19 @@ offer + invoice + preimage triple.
 
 Logic lives in `bolt12-common`. `bolt12-cli` is clap + JSON on stdout.
 
+## Install
+
+```sh
+cargo install bolt12-cli
+```
+
+The binary is `bolt12`.
+
 ## Build
 
 ```sh
 cargo build --release
 ```
-
-The binary is `bolt12`.
 
 ## Decode
 
@@ -32,9 +38,9 @@ not a BOLT 12 invoice field. The key is omitted when the list is empty.
 
 ## Verify
 
-Official payer proof (`lightning-payer-proof`): cryptographic checks plus
-`pays_offers_recipient` (invoice issuer can sign for this offer's recipient,
-not "this paid this exact offer"):
+Official payer proof: LDK cryptographic checks plus `pays_offers_recipient`
+(invoice issuer can sign for this offer's recipient, not "this paid this
+exact offer"):
 
 ```sh
 bolt12 verify lnp1... --offer lno1...

@@ -12,8 +12,7 @@ authors = ["Vincenzo Palazzo <vincenzopalazzodev@gmail.com>"]
 
 [workspace.dependencies]
 bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
-lightning = { git = "https://github.com/lightningdevkit/rust-lightning", rev = "054c95ae10879627d157f1ffbbc51d4b95b08711", default-features = false, features = ["std"] }
-lightning-payer-proof = { git = "https://github.com/lightningdevkit/rust-lightning", rev = "054c95ae10879627d157f1ffbbc51d4b95b08711", default-features = false }
+lightning = { version = "0.3.0-rc1", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
