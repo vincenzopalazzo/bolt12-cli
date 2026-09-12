@@ -32,10 +32,12 @@ not a BOLT 12 invoice field. The key is omitted when the list is empty.
 
 ## Verify
 
-Official payer proof:
+Official payer proof (`lightning-payer-proof`): cryptographic checks plus
+`pays_offers_recipient` (invoice issuer can sign for this offer's recipient,
+not "this paid this exact offer"):
 
 ```sh
-bolt12 verify lnp1...
+bolt12 verify lnp1... --offer lno1...
 ```
 
 Ocean-style payment triple:

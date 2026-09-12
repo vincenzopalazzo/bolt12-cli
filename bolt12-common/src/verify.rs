@@ -1,35 +1,70 @@
 use lightning::offers::invoice::Bolt12Invoice;
 use lightning::offers::offer::Offer;
 use lightning::types::payment::{PaymentHash, PaymentPreimage};
+use lightning_payer_proof::{verify, VerifyError};
 use std::str::FromStr;
 
-use crate::decode::{parse_invoice, parse_payer_proof};
+use crate::decode::parse_invoice;
 use crate::error::Error;
 use crate::hex;
 use crate::model::{Check, VerifyKind, VerifyReport};
 
-/// Verify an official BOLT 12 payer proof (`lnp1...`).
+/// Verify an official BOLT 12 payer proof (`lnp1...`) against an offer.
 ///
-/// LDK parses and cryptographically verifies the proof in one step: merkle
-/// reconstruction, invoice-node signature, payer signature, and
-/// `SHA256(preimage) == payment_hash`.
-pub fn verify_payer_proof(encoded: &str) -> Result<VerifyReport, Error> {
-    match parse_payer_proof(encoded.trim()) {
-        Ok(_) => Ok(VerifyReport::new(
-            VerifyKind::PayerProof,
-            vec![
-                Check::pass("decode"),
-                Check::pass("merkle_root"),
-                Check::pass("invoice_signature"),
-                Check::pass("payer_signature"),
-                Check::pass("preimage"),
-            ],
-        )),
-        Err(err) => Ok(VerifyReport::new(
-            VerifyKind::PayerProof,
-            vec![Check::fail("decode", err.message)],
-        )),
+/// [`lightning_payer_proof::verify`] checks bech32, merkle reconstruction,
+/// invoice-node signature, payer signature, and
+/// `SHA256(preimage) == payment_hash`. Failed cryptographic checks arrive as
+/// [`VerifyError::MalformedProof`] and are not distinguished from each other.
+///
+/// `pays_offers_recipient` then checks that the invoice issuer can sign for
+/// `offer`'s recipient. That is a recipient match, not "this paid this exact
+/// offer".
+pub fn verify_payer_proof(encoded: &str, offer: &str) -> Result<VerifyReport, Error> {
+    let mut checks = Vec::new();
+
+    let proof = match verify(encoded.trim()) {
+        Ok(proof) => {
+            checks.push(Check::pass("decode"));
+            checks.push(Check::pass("merkle_root"));
+            checks.push(Check::pass("invoice_signature"));
+            checks.push(Check::pass("payer_signature"));
+            checks.push(Check::pass("preimage"));
+            proof
+        }
+        Err(VerifyError::InvalidBech32) => {
+            checks.push(Check::fail("decode", "not a bech32-encoded payer proof"));
+            return Ok(VerifyReport::new(VerifyKind::PayerProof, checks));
+        }
+        Err(err) => {
+            checks.push(Check::fail("decode", err.to_string()));
+            return Ok(VerifyReport::new(VerifyKind::PayerProof, checks));
+        }
+    };
+
+    let offer = match Offer::from_str(offer.trim()) {
+        Ok(offer) => {
+            checks.push(Check::pass("decode_offer"));
+            offer
+        }
+        Err(err) => {
+            checks.push(Check::fail(
+                "decode_offer",
+                format!("offer decode failed: {err:?}"),
+            ));
+            return Ok(VerifyReport::new(VerifyKind::PayerProof, checks));
+        }
+    };
+
+    if proof.pays_offers_recipient(&offer) {
+        checks.push(Check::pass("pays_offers_recipient"));
+    } else {
+        checks.push(Check::fail(
+            "pays_offers_recipient",
+            "invoice issuer cannot sign for this offer's recipient",
+        ));
     }
+
+    Ok(VerifyReport::new(VerifyKind::PayerProof, checks))
 }
 
 /// Verify an Ocean-style offer + invoice + preimage triple.
@@ -217,8 +252,6 @@ mod tests {
 
     #[test]
     fn verifies_ldk_minimal_payer_proof() {
-        let report = verify_payer_proof(LNP_MINIMAL).unwrap();
-        assert!(report.valid, "{report:?}");
         match decode(LNP_MINIMAL).unwrap() {
             Decoded::PayerProof(proof) => {
                 assert_eq!(proof.payment_preimage, LNP_PREIMAGE);
@@ -228,8 +261,63 @@ mod tests {
     }
 
     #[test]
-    fn rejects_garbage_payer_proof() {
-        let report = verify_payer_proof("lnp1qqqq").unwrap();
+    fn verifies_payer_proof_against_matching_offer() {
+        let offer = bech32_from_hex::<lightning::offers::offer::Offer>(include_str!(
+            "../tests/fixtures/payer_proof/offer.hex"
+        ));
+        let proof = bech32_from_hex::<lightning::offers::payer_proof::PayerProof>(include_str!(
+            "../tests/fixtures/payer_proof/offer_proof.hex"
+        ));
+        let report = verify_payer_proof(&proof, &offer).unwrap();
+        assert!(report.valid, "{report:?}");
+        assert!(report
+            .checks
+            .iter()
+            .any(|c| c.name == "pays_offers_recipient" && c.passed));
+    }
+
+    #[test]
+    fn rejects_payer_proof_for_other_offer_recipient() {
+        let other = bech32_from_hex::<lightning::offers::offer::Offer>(include_str!(
+            "../tests/fixtures/payer_proof/other_offer.hex"
+        ));
+        let proof = bech32_from_hex::<lightning::offers::payer_proof::PayerProof>(include_str!(
+            "../tests/fixtures/payer_proof/offer_proof.hex"
+        ));
+        let report = verify_payer_proof(&proof, &other).unwrap();
         assert!(!report.valid);
+        assert!(report
+            .checks
+            .iter()
+            .any(|c| c.name == "pays_offers_recipient" && !c.passed));
+    }
+
+    #[test]
+    fn rejects_garbage_payer_proof() {
+        let report = verify_payer_proof("lnp1qqqq", GOOD_OFFER).unwrap();
+        assert!(!report.valid);
+        assert!(report
+            .checks
+            .iter()
+            .any(|c| c.name == "decode" && !c.passed));
+    }
+
+    fn bech32_from_hex<T>(hex: &str) -> String
+    where
+        T: TryFrom<Vec<u8>> + ToString,
+        T::Error: core::fmt::Debug,
+    {
+        let hex = hex.trim();
+        assert!(
+            hex.len() % 2 == 0,
+            "vector must have an even number of hex digits"
+        );
+        let bytes = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).expect("vector must be valid hex"))
+            .collect::<Vec<_>>();
+        T::try_from(bytes)
+            .expect("LDK test vector must decode")
+            .to_string()
     }
 }

@@ -150,6 +150,7 @@ version = "0.1.0"
 dependencies = [
  "bech32",
  "lightning",
+ "lightning-payer-proof",
  "serde",
  "serde_json",
  "thiserror",
@@ -341,6 +342,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "lightning-payer-proof"
+version = "0.1.0+git"
+source = "git+https://github.com/lightningdevkit/rust-lightning?rev=054c95ae10879627d157f1ffbbc51d4b95b08711#054c95ae10879627d157f1ffbbc51d4b95b08711"
+dependencies = [
+ "lightning",
 ]
 
 [[package]]
