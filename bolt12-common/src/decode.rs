@@ -56,7 +56,7 @@ pub(crate) fn decode_invoice(encoded: &str) -> Result<Invoice, Error> {
             format!("invoice decode failed: {err:?}"),
         )
     })?;
-    let unknown = unknown_invoice_tlvs(&bytes)?;
+    let unknown = scan_unknown_tlvs(&bytes)?;
     Ok(curated_invoice(&invoice, unknown))
 }
 
@@ -130,7 +130,7 @@ pub(crate) fn curated_offer(offer: &LdkOffer) -> Offer {
     }
 }
 
-pub(crate) fn curated_invoice(invoice: &Bolt12Invoice, unknown: Vec<UnknownTlv>) -> Invoice {
+pub(crate) fn curated_invoice(invoice: &Bolt12Invoice, unknown: ScannedUnknownTlvs) -> Invoice {
     Invoice {
         offer_id: invoice.offer_id().map(|id| hex::encode(&id.0)),
         offer_chains: invoice.offer_chains().map(|chains| {
@@ -187,16 +187,36 @@ pub(crate) fn curated_invoice(invoice: &Bolt12Invoice, unknown: Vec<UnknownTlv>)
         invoice_features: features_hex(invoice.invoice_features().le_flags()),
         node_id: invoice.signing_pubkey().to_string(),
         signature: hex::encode(invoice.signature().as_ref()),
-        unknown_invoice_tlvs: unknown,
+        unknown_offer_tlvs: unknown.offer,
+        unknown_invoice_request_tlvs: unknown.invoice_request,
+        unknown_invoice_tlvs: unknown.invoice,
     }
 }
 
-/// Known BOLT 12 invoice TLV types (160–176). Anything else in 160..=239 is
-/// unknown; odd unknowns are ignored, even ones reject the invoice.
-const KNOWN_INVOICE_TLV_TYPES: &[u64] = &[160, 162, 164, 166, 168, 170, 172, 174, 176];
+/// Known BOLT 12 TLV types per section, mirroring Tides' CLN v24.02 wire
+/// tables (`wire/bolt12_wire.csv` at tag v24.02). The scanner exists to
+/// predict what CLN v24.02 `decode` reports as unknown, so CLN's known set —
+/// not LDK's — is the ground truth. Types >= 240 (signature + the TLV ignore
+/// range) are never collected.
+const KNOWN_OFFER_TLV_TYPES: &[u64] = &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 26, 28, 30, 32];
+const KNOWN_INVOICE_REQUEST_TLV_TYPES: &[u64] = &[80, 82, 84, 86, 88, 89, 90, 92];
+const KNOWN_INVOICE_TLV_TYPES: &[u64] = &[160, 162, 164, 166, 168, 170, 172, 174, 176, 178];
 
-fn unknown_invoice_tlvs(bytes: &[u8]) -> Result<Vec<UnknownTlv>, Error> {
-    let mut unknown = Vec::new();
+/// Unknown TLVs in a decoded invoice's raw stream, bucketed by the BOLT 12
+/// section the type belongs to. An `lni` string embeds offer (0..=79),
+/// invoice_request (80..=159) and invoice (160..=239) records in one TLV
+/// stream; odd unknowns are legal for signers (even unknowns are rejected by
+/// `Bolt12Invoice::try_from` before we ever scan), but downstream CLN v24.02
+/// decoders surface them in `unknown_*_tlvs` JSON and crash.
+#[derive(Debug, Default)]
+pub(crate) struct ScannedUnknownTlvs {
+    pub offer: Vec<UnknownTlv>,
+    pub invoice_request: Vec<UnknownTlv>,
+    pub invoice: Vec<UnknownTlv>,
+}
+
+fn scan_unknown_tlvs(bytes: &[u8]) -> Result<ScannedUnknownTlvs, Error> {
+    let mut unknown = ScannedUnknownTlvs::default();
     let mut pos = 0;
     while pos < bytes.len() {
         let type_id = read_bigsize(bytes, &mut pos)?;
@@ -211,8 +231,19 @@ fn unknown_invoice_tlvs(bytes: &[u8]) -> Result<Vec<UnknownTlv>, Error> {
         }
         let value = &bytes[pos..pos + len];
         pos += len;
-        if (160..=239).contains(&type_id) && !KNOWN_INVOICE_TLV_TYPES.contains(&type_id) {
-            unknown.push(UnknownTlv {
+        let bucket = if (0..80).contains(&type_id) && !KNOWN_OFFER_TLV_TYPES.contains(&type_id) {
+            Some(&mut unknown.offer)
+        } else if (80..160).contains(&type_id)
+            && !KNOWN_INVOICE_REQUEST_TLV_TYPES.contains(&type_id)
+        {
+            Some(&mut unknown.invoice_request)
+        } else if (160..240).contains(&type_id) && !KNOWN_INVOICE_TLV_TYPES.contains(&type_id) {
+            Some(&mut unknown.invoice)
+        } else {
+            None
+        };
+        if let Some(bucket) = bucket {
+            bucket.push(UnknownTlv {
                 type_id,
                 length,
                 value: hex::encode(value),
@@ -372,6 +403,38 @@ mod tests {
             }
             other => panic!("expected offer, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn scan_buckets_unknown_tlvs_by_bolt12_section() {
+        // 79 (odd, offer range), 159 (odd, invoice_request range) and 161
+        // (odd, invoice range) are all unknown; 10 (offer description) and
+        // 178 (invoice recurrence_basetime) are CLN-known and not flagged;
+        // 240 is the signature type, never collected.
+        let mut bytes = vec![10u8, 2, 0x42, 0x43, 79, 0, 159, 0, 161, 0, 178, 0];
+        bytes.extend_from_slice(&[240, 64]);
+        bytes.extend_from_slice(&[7u8; 64]);
+        let scanned = scan_unknown_tlvs(&bytes).expect("walks cleanly");
+        let ids = |v: &[UnknownTlv]| -> Vec<u64> { v.iter().map(|tlv| tlv.type_id).collect() };
+        assert_eq!(ids(&scanned.offer), vec![79]);
+        assert_eq!(ids(&scanned.invoice_request), vec![159]);
+        assert_eq!(ids(&scanned.invoice), vec![161]);
+    }
+
+    #[test]
+    fn scan_treats_every_cln_known_type_as_known() {
+        let mut bytes = Vec::new();
+        for type_id in KNOWN_OFFER_TLV_TYPES
+            .iter()
+            .chain(KNOWN_INVOICE_REQUEST_TLV_TYPES)
+            .chain(KNOWN_INVOICE_TLV_TYPES)
+        {
+            bytes.extend_from_slice(&[*type_id as u8, 0]);
+        }
+        let scanned = scan_unknown_tlvs(&bytes).expect("walks cleanly");
+        assert!(scanned.offer.is_empty());
+        assert!(scanned.invoice_request.is_empty());
+        assert!(scanned.invoice.is_empty());
     }
 
     #[test]

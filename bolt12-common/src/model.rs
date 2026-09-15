@@ -81,10 +81,14 @@ pub struct Invoice {
     pub node_id: String,
     pub signature: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unknown_offer_tlvs: Vec<UnknownTlv>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unknown_invoice_request_tlvs: Vec<UnknownTlv>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unknown_invoice_tlvs: Vec<UnknownTlv>,
 }
 
-/// Unknown TLV in the invoice type range (160–239).
+/// Unknown TLV in a BOLT 12 stream, bucketed by the section it was found in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UnknownTlv {
     #[serde(rename = "type")]

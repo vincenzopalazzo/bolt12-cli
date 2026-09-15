@@ -9,6 +9,10 @@ struct DecodePair {
     valid: bool,
     offer: String,
     invoice: String,
+    #[serde(default)]
+    unknown_offer_tlvs: Vec<ExpectedTlv>,
+    #[serde(default)]
+    unknown_invoice_request_tlvs: Vec<ExpectedTlv>,
     unknown_invoice_tlvs: Vec<ExpectedTlv>,
 }
 
@@ -58,6 +62,20 @@ fn decodes_unknown_invoice_tlv_pairs() {
             "{}",
             pair.name
         );
+        assert!(
+            pair.unknown_offer_tlvs.is_empty()
+                && pair.unknown_invoice_request_tlvs.is_empty(),
+            "{}: fixture carries embedded-section unknowns; extend this test",
+            pair.name
+        );
+        assert!(
+            invoice.unknown_offer_tlvs.is_empty()
+                && invoice.unknown_invoice_request_tlvs.is_empty(),
+            "{}: unexpected embedded-section unknowns: offer={:?} invoice_request={:?}",
+            pair.name,
+            invoice.unknown_offer_tlvs,
+            invoice.unknown_invoice_request_tlvs
+        );
         assert_eq!(
             invoice.offer_id.as_deref(),
             Some(offer.offer_id.as_str()),
@@ -84,6 +102,11 @@ fn invoice_without_unknown_tlvs_omits_the_list() {
     match decode(&pair.invoice).unwrap() {
         Decoded::Invoice(invoice) => {
             assert!(invoice.unknown_invoice_tlvs.is_empty(), "{invoice:?}");
+            assert!(
+                invoice.unknown_offer_tlvs.is_empty()
+                    && invoice.unknown_invoice_request_tlvs.is_empty(),
+                "{invoice:?}"
+            );
             assert!(pair.valid);
         }
         other => panic!("expected invoice, got {other:?}"),
