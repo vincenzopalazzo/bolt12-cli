@@ -10,7 +10,7 @@ use bolt12_common::{decode, verify_payer_proof, verify_payment, Error, ErrorKind
 #[derive(Debug, Parser)]
 #[command(
     name = "bolt12",
-    about = "Swiss knife for BOLT12 offers, invoices, and payer proofs"
+    about = "Swiss army knife for BOLT12 offers, invoices, and payer proofs"
 )]
 struct Args {
     #[command(subcommand)]

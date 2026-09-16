@@ -1,6 +1,6 @@
 ## Clarified Problem Statement
 
-**Goal:** Ship a minimal Rust/LDK Swiss-knife CLI that decodes BOLT12 offers (`lno1`), invoices (`lni1`), and payer proofs (`lnp1`) to curated JSON, and verifies both official `lnp1` payer proofs and the Ocean-style offer+invoice+preimage triple.
+**Goal:** Ship a minimal Rust/LDK Swiss army knife CLI that decodes BOLT12 offers (`lno1`), invoices (`lni1`), and payer proofs (`lnp1`) to curated JSON, and verifies both official `lnp1` payer proofs and the Ocean-style offer+invoice+preimage triple.
 
 **Constraints:**
 - Rust + LDK (`lightning` crate). Pin git/main (or a post-#4297 release) so `PayerProof` exists; crates.io may be too old.
@@ -41,7 +41,7 @@
 ### Approach C: Command-handler library
 - Sketch: `bolt12-common` exposes `enum Command { Decode(String), Verify(...) }` and `fn run(cmd) -> JsonValue`. CLI and a future `ocean-ln` httpd share the same handlers and JSON schema.
 - Affected files: `bolt12-common/src/command.rs` in addition to A; CLI `main.rs` even thinner
-- Tradeoffs: Best if Ocean adoption is imminent. Couples the library to CLI JSON/exit semantics. Against “general Swiss knife, Ocean later” and against minimal.
+- Tradeoffs: Best if Ocean adoption is imminent. Couples the library to CLI JSON/exit semantics. Against “general Swiss army knife, Ocean later” and against minimal.
 - Effort: M
 
 ## Recommendation
