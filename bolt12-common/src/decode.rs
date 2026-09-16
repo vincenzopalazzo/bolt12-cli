@@ -18,9 +18,10 @@ use crate::model::{
 };
 
 fn unix_to_iso(secs: u64) -> String {
-    let dt = DateTime::<Utc>::from_timestamp(secs as i64, 0)
-        .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-    dt.to_rfc3339()
+    let capped = secs.min(i64::MAX as u64) as i64;
+    DateTime::<Utc>::from_timestamp(capped, 0)
+        .unwrap_or(DateTime::<Utc>::MAX_UTC)
+        .to_rfc3339()
 }
 
 /// Decode a BOLT 12 bech32 string by HRP (`lno` / `lni` / `lnp`).
@@ -422,6 +423,22 @@ mod tests {
             }
             other => panic!("expected offer, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn unix_to_iso_formats_utc_iso8601() {
+        assert_eq!(unix_to_iso(0), "1970-01-01T00:00:00+00:00");
+        assert_eq!(unix_to_iso(1), "1970-01-01T00:00:01+00:00");
+        assert_eq!(unix_to_iso(1_700_000_000), "2023-11-14T22:13:20+00:00");
+    }
+
+    #[test]
+    fn unix_to_iso_caps_out_of_range_input() {
+        assert_eq!(unix_to_iso(u64::MAX), DateTime::<Utc>::MAX_UTC.to_rfc3339());
+        assert_eq!(
+            unix_to_iso(i64::MAX as u64 + 1),
+            DateTime::<Utc>::MAX_UTC.to_rfc3339()
+        );
     }
 
     #[test]

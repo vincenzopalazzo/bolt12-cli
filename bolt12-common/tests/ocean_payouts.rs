@@ -5,6 +5,7 @@
 //! shorter CLN-style) and the offer + invoice + preimage verify path.
 
 use bolt12_common::{decode, verify_payment, Decoded};
+use chrono::DateTime as ChronoDateTime;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +50,19 @@ fn decodes_ocean_invoices() {
                         .payment_paths
                         .iter()
                         .all(|path| path.payinfo.is_some()),
+                    "{}",
+                    payout.source
+                );
+                let created_at_iso = ChronoDateTime::parse_from_rfc3339(&invoice.created_at_iso)
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "{}: invalid created_at_iso `{}`: {err}",
+                            payout.source, invoice.created_at_iso
+                        )
+                    });
+                assert_eq!(
+                    created_at_iso.timestamp() as u64,
+                    invoice.created_at,
                     "{}",
                     payout.source
                 );
