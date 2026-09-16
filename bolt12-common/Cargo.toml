@@ -18,6 +18,7 @@ bech32.workspace = true
 lightning.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+chrono = { workspace = true }
 
 [dev-dependencies]
 serde.workspace = true

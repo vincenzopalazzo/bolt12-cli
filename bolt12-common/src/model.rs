@@ -24,6 +24,8 @@ pub struct Offer {
     pub features: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub absolute_expiry: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_expiry_iso: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub paths: Vec<BlindedPath>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -50,6 +52,8 @@ pub struct Invoice {
     pub offer_features: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub absolute_expiry: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_expiry_iso: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub offer_paths: Vec<BlindedPath>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,6 +75,7 @@ pub struct Invoice {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub payment_paths: Vec<BlindedPath>,
     pub created_at: u64,
+    pub created_at_iso: String,
     pub relative_expiry: u64,
     pub payment_hash: String,
     pub amount_msat: u64,
@@ -114,6 +119,8 @@ pub struct PayerProof {
     pub issuer: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at_iso: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof_note: Option<String>,
 }

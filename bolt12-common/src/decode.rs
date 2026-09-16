@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use bech32::primitives::decode::CheckedHrpstring;
 use bech32::NoChecksum;
+use chrono::{DateTime, Utc};
 use lightning::blinded_path::message::BlindedMessagePath;
 use lightning::blinded_path::payment::BlindedPaymentPath;
 use lightning::blinded_path::{Direction, IntroductionNode as LdkIntroductionNode};
@@ -15,6 +16,11 @@ use crate::model::{
     Amount, BlindedHop, BlindedPath, BlindedPayInfo, Decoded, IntroductionNode, Invoice, Offer,
     PayerProof, UnknownTlv,
 };
+
+fn unix_to_iso(secs: u64) -> String {
+    let dt = DateTime::<Utc>::from_timestamp(secs as i64, 0).unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+    dt.to_rfc3339()
+}
 
 /// Decode a BOLT 12 bech32 string by HRP (`lno` / `lni` / `lnp`).
 ///
@@ -108,6 +114,8 @@ pub(crate) fn parse_payer_proof(encoded: &str) -> Result<LdkPayerProof, Error> {
 }
 
 pub(crate) fn curated_offer(offer: &LdkOffer) -> Offer {
+    let absolute_expiry = offer.absolute_expiry().map(|d| d.as_secs());
+    let absolute_expiry_iso = absolute_expiry.map(|s| unix_to_iso(s));
     Offer {
         offer_id: hex::encode(&offer.id().0),
         chains: offer
@@ -122,7 +130,8 @@ pub(crate) fn curated_offer(offer: &LdkOffer) -> Offer {
         amount: offer.amount().map(map_amount),
         description: offer.description().map(|s| s.to_string()),
         features: features_hex(offer.offer_features().le_flags()),
-        absolute_expiry: offer.absolute_expiry().map(|d| d.as_secs()),
+        absolute_expiry,
+        absolute_expiry_iso,
         paths: offer.paths().iter().map(map_message_path).collect(),
         issuer: offer.issuer().map(|s| s.to_string()),
         quantity_max: quantity_max(offer.supported_quantity()),
@@ -131,6 +140,10 @@ pub(crate) fn curated_offer(offer: &LdkOffer) -> Offer {
 }
 
 pub(crate) fn curated_invoice(invoice: &Bolt12Invoice, unknown: ScannedUnknownTlvs) -> Invoice {
+    let created_at_secs = invoice.created_at().as_secs();
+    let created_at_iso = unix_to_iso(created_at_secs);
+    let absolute_expiry_secs = invoice.absolute_expiry().map(|d| d.as_secs());
+    let absolute_expiry_iso = absolute_expiry_secs.map(|s| unix_to_iso(s));
     Invoice {
         offer_id: invoice.offer_id().map(|id| hex::encode(&id.0)),
         offer_chains: invoice.offer_chains().map(|chains| {
@@ -148,7 +161,8 @@ pub(crate) fn curated_invoice(invoice: &Bolt12Invoice, unknown: ScannedUnknownTl
         offer_features: invoice
             .offer_features()
             .and_then(|features| features_hex(features.le_flags())),
-        absolute_expiry: invoice.absolute_expiry().map(|d| d.as_secs()),
+        absolute_expiry: absolute_expiry_secs,
+        absolute_expiry_iso,
         offer_paths: invoice
             .message_paths()
             .iter()
@@ -175,7 +189,8 @@ pub(crate) fn curated_invoice(invoice: &Bolt12Invoice, unknown: ScannedUnknownTl
             .iter()
             .map(map_payment_path)
             .collect(),
-        created_at: invoice.created_at().as_secs(),
+        created_at: created_at_secs,
+        created_at_iso,
         relative_expiry: invoice.relative_expiry().as_secs(),
         payment_hash: hex::encode(&invoice.payment_hash().0),
         amount_msat: invoice.amount_msats(),
@@ -280,6 +295,8 @@ fn read_be_int(bytes: &[u8], pos: &mut usize, width: usize) -> Result<u64, Error
 }
 
 pub(crate) fn curated_payer_proof(proof: &LdkPayerProof) -> PayerProof {
+    let created_at_secs = proof.invoice_created_at().map(|d| d.as_secs());
+    let created_at_iso = created_at_secs.map(|s| unix_to_iso(s));
     PayerProof {
         payer_id: proof.payer_signing_pubkey().to_string(),
         issuer_id: proof.issuer_signing_pubkey().to_string(),
@@ -291,7 +308,8 @@ pub(crate) fn curated_payer_proof(proof: &LdkPayerProof) -> PayerProof {
         amount_msat: proof.invoice_amount_msats(),
         description: proof.offer_description().map(|s| s.to_string()),
         issuer: proof.offer_issuer().map(|s| s.to_string()),
-        created_at: proof.invoice_created_at().map(|d| d.as_secs()),
+        created_at: created_at_secs,
+        created_at_iso,
         proof_note: proof.proof_note().map(|s| s.to_string()),
     }
 }
