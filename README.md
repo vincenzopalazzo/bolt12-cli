@@ -1,6 +1,6 @@
 # bolt12-cli
 
-Minimal Rust/LDK Swiss knife for BOLT 12. Decode offers, invoices, and payer
+Minimal Rust/LDK Swiss army knife for BOLT 12. Decode offers, invoices, and payer
 proofs to curated JSON. Verify official `lnp1` payer proofs and the
 offer + invoice + preimage triple.
 
