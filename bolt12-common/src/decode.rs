@@ -18,7 +18,8 @@ use crate::model::{
 };
 
 fn unix_to_iso(secs: u64) -> String {
-    let dt = DateTime::<Utc>::from_timestamp(secs as i64, 0).unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+    let dt = DateTime::<Utc>::from_timestamp(secs as i64, 0)
+        .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
     dt.to_rfc3339()
 }
 
@@ -115,7 +116,7 @@ pub(crate) fn parse_payer_proof(encoded: &str) -> Result<LdkPayerProof, Error> {
 
 pub(crate) fn curated_offer(offer: &LdkOffer) -> Offer {
     let absolute_expiry = offer.absolute_expiry().map(|d| d.as_secs());
-    let absolute_expiry_iso = absolute_expiry.map(|s| unix_to_iso(s));
+    let absolute_expiry_iso = absolute_expiry.map(unix_to_iso);
     Offer {
         offer_id: hex::encode(&offer.id().0),
         chains: offer
@@ -143,7 +144,7 @@ pub(crate) fn curated_invoice(invoice: &Bolt12Invoice, unknown: ScannedUnknownTl
     let created_at_secs = invoice.created_at().as_secs();
     let created_at_iso = unix_to_iso(created_at_secs);
     let absolute_expiry_secs = invoice.absolute_expiry().map(|d| d.as_secs());
-    let absolute_expiry_iso = absolute_expiry_secs.map(|s| unix_to_iso(s));
+    let absolute_expiry_iso = absolute_expiry_secs.map(unix_to_iso);
     Invoice {
         offer_id: invoice.offer_id().map(|id| hex::encode(&id.0)),
         offer_chains: invoice.offer_chains().map(|chains| {
@@ -296,7 +297,7 @@ fn read_be_int(bytes: &[u8], pos: &mut usize, width: usize) -> Result<u64, Error
 
 pub(crate) fn curated_payer_proof(proof: &LdkPayerProof) -> PayerProof {
     let created_at_secs = proof.invoice_created_at().map(|d| d.as_secs());
-    let created_at_iso = created_at_secs.map(|s| unix_to_iso(s));
+    let created_at_iso = created_at_secs.map(unix_to_iso);
     PayerProof {
         payer_id: proof.payer_signing_pubkey().to_string(),
         issuer_id: proof.issuer_signing_pubkey().to_string(),
