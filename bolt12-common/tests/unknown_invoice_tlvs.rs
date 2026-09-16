@@ -63,8 +63,7 @@ fn decodes_unknown_invoice_tlv_pairs() {
             pair.name
         );
         assert!(
-            pair.unknown_offer_tlvs.is_empty()
-                && pair.unknown_invoice_request_tlvs.is_empty(),
+            pair.unknown_offer_tlvs.is_empty() && pair.unknown_invoice_request_tlvs.is_empty(),
             "{}: fixture carries embedded-section unknowns; extend this test",
             pair.name
         );
