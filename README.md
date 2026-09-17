@@ -20,6 +20,11 @@ The binary is `bolt12`.
 cargo build --release
 ```
 
+`bolt12-common` also emits `target/release/libbolt12_common.a` and
+`bolt12-common/include/bolt12.h` (`bolt12_tides_unsafe_invoice`). That is
+what `ocean-pay` (cln-offers, cgo) links; do not reimplement the TLV walk
+in Go.
+
 ## Decode
 
 HRP is auto-detected (`lno` / `lni` / `lnp`).

@@ -6,7 +6,9 @@ mod hex;
 mod model;
 mod verify;
 
-pub use decode::decode;
+mod capi;
+
+pub use decode::{decode, tides_unsafe_invoice};
 pub use error::{Error, ErrorKind};
 pub use model::{
     Amount, BlindedHop, BlindedPath, BlindedPayInfo, Check, Decoded, IntroductionNode, Invoice,

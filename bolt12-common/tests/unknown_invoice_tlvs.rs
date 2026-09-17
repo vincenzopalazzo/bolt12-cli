@@ -1,6 +1,6 @@
 //! Decode snapshots for invoices with and without unknown invoice-range TLVs.
 
-use bolt12_common::{decode, Decoded, UnknownTlv};
+use bolt12_common::{decode, tides_unsafe_invoice, Decoded, UnknownTlv};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -110,6 +110,28 @@ fn invoice_without_unknown_tlvs_omits_the_list() {
         }
         other => panic!("expected invoice, got {other:?}"),
     }
+}
+
+#[test]
+fn invoice_with_empty_tlv_161_is_tides_unsafe() {
+    let pair = fixtures()
+        .into_iter()
+        .find(|pair| pair.name == "unknown_invoice_tlv_161_empty")
+        .expect("unknown TLV pair");
+    let reason = tides_unsafe_invoice(&pair.invoice).expect("must refuse");
+    assert!(
+        reason.contains("161"),
+        "expected TLV 161 in reason, got {reason}"
+    );
+}
+
+#[test]
+fn invoice_without_unknown_tlvs_is_tides_safe() {
+    let pair = fixtures()
+        .into_iter()
+        .find(|pair| pair.name == "no_unknown_invoice_tlvs")
+        .expect("clean pair");
+    assert_eq!(tides_unsafe_invoice(&pair.invoice), None);
 }
 
 #[test]

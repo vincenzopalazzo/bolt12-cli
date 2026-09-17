@@ -13,6 +13,9 @@ homepage = "https://github.com/vincenzopalazzo/bolt12-cli"
 keywords = ["bitcoin", "lightning", "bolt12"]
 categories = ["encoding"]
 
+[lib]
+crate-type = ["rlib", "staticlib"]
+
 [dependencies]
 bech32.workspace = true
 lightning.workspace = true

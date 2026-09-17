@@ -29,6 +29,36 @@ fn unix_to_iso(secs: u64) -> String {
 /// `lnp` parsing also runs LDK's payer-proof verification (merkle reconstruction,
 /// invoice signature, payer signature, preimage/hash). Invalid proofs cannot be
 /// decoded.
+/// Why this invoice must not be sent to Tides CLN v24.02 `decode`.
+/// `None` = safe. Unknown TLVs in any BOLT 12 section of the `lni`
+/// (offer / invoice_request / invoice) crash Tides via `json_add_extra_fields`.
+pub fn tides_unsafe_invoice(invoice: &str) -> Option<String> {
+    match decode(invoice) {
+        Ok(Decoded::Invoice(inv)) => {
+            let sections = [
+                ("offer", &inv.unknown_offer_tlvs),
+                ("invoice_request", &inv.unknown_invoice_request_tlvs),
+                ("invoice", &inv.unknown_invoice_tlvs),
+            ];
+            let mut unsafe_reasons = Vec::new();
+            for (section, tlvs) in sections {
+                if tlvs.is_empty() {
+                    continue;
+                }
+                let types: Vec<u64> = tlvs.iter().map(|tlv| tlv.type_id).collect();
+                unsafe_reasons.push(format!("unknown {section} TLVs {types:?}"));
+            }
+            if unsafe_reasons.is_empty() {
+                None
+            } else {
+                Some(unsafe_reasons.join("; "))
+            }
+        }
+        Ok(_) => Some("BOLT12 string is not an invoice".to_string()),
+        Err(err) => Some(format!("invoice decode failed: {err}")),
+    }
+}
+
 pub fn decode(encoded: &str) -> Result<Decoded, Error> {
     let encoded = encoded.trim();
     match hrp(encoded).map(str::to_ascii_lowercase).as_deref() {
@@ -471,6 +501,17 @@ mod tests {
         assert!(scanned.offer.is_empty());
         assert!(scanned.invoice_request.is_empty());
         assert!(scanned.invoice.is_empty());
+    }
+
+    #[test]
+    fn garbage_is_tides_unsafe() {
+        assert!(tides_unsafe_invoice("not-a-bolt12").is_some());
+    }
+
+    #[test]
+    fn offer_hrp_is_tides_unsafe() {
+        let reason = tides_unsafe_invoice(GOOD_OFFER).expect("must refuse");
+        assert!(reason.contains("not an invoice"), "got {reason}");
     }
 
     #[test]
