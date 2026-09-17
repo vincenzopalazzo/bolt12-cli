@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["bolt12-common", "bolt12-cli"]
+members = ["bolt12-common", "bolt12-cli", "bolt12-ffi"]
 
 [workspace.package]
 version = "0.1.0"

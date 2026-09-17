@@ -163,6 +163,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bolt12-ffi"
+version = "0.1.0"
+dependencies = [
+ "bolt12-common",
+]
+
+[[package]]
 name = "cc"
 version = "1.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

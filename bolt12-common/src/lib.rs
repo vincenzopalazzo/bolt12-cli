@@ -6,8 +6,6 @@ mod hex;
 mod model;
 mod verify;
 
-mod capi;
-
 pub use decode::{decode, tides_unsafe_invoice};
 pub use error::{Error, ErrorKind};
 pub use model::{

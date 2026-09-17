@@ -1,6 +1,7 @@
-//! C ABI for callers that cannot link Rust (CLN `ocean-pay` via cgo).
+//! C ABI over `bolt12-common` for callers that cannot link Rust
+//! (CLN `ocean-pay` via cgo).
 //!
-//! `cargo build -p bolt12-common --release` writes `libbolt12_common.a`.
+//! `cargo build -p bolt12-ffi --release` writes `libbolt12_ffi.a`.
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
@@ -25,7 +26,7 @@ pub unsafe extern "C" fn bolt12_tides_unsafe_invoice(invoice: *const c_char) -> 
         Ok(s) => s,
         Err(err) => return to_cstring(&format!("invoice decode failed: {err}")),
     };
-    match crate::tides_unsafe_invoice(s) {
+    match bolt12_common::tides_unsafe_invoice(s) {
         None => std::ptr::null_mut(),
         Some(reason) => to_cstring(&reason),
     }
