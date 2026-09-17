@@ -1,0 +1,21 @@
+[package]
+name = "bolt12-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "C ABI for bolt12-common (ocean-pay cgo)"
+readme = "../README.md"
+documentation = "https://docs.rs/bolt12-ffi"
+homepage = "https://github.com/vincenzopalazzo/bolt12-cli"
+keywords = ["bitcoin", "lightning", "bolt12"]
+categories = ["encoding"]
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+bolt12-common = { path = "../bolt12-common", version = "0.1.0" }

@@ -20,6 +20,17 @@ The binary is `bolt12`.
 cargo build --release
 ```
 
+FFI lives in `bolt12-ffi` (staticlib), not in `bolt12-common`:
+
+```sh
+cargo build -p bolt12-ffi --release
+```
+
+That writes `target/release/libbolt12_ffi.a` and uses
+`bolt12-ffi/include/bolt12.h` (`bolt12_tides_unsafe_invoice`).
+`ocean-pay` (cln-offers, cgo) links that; do not reimplement the TLV walk
+in Go.
+
 ## Decode
 
 HRP is auto-detected (`lno` / `lni` / `lnp`).
